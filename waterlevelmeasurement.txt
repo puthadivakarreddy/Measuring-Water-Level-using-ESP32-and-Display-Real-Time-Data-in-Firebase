@@ -1,0 +1,90 @@
+#include <WiFi.h>
+#include <Firebase_ESP_Client.h>
+#include <addons/TokenHelper.h>
+#include <addons/RTDBHelper.h>
+
+// Wi-Fi Credentials
+#define WIFI_SSID "pra"
+#define WIFI_PASSWORD "pradeep2003"
+
+// Firebase Credentials
+#define API_KEY "AIzaSyD_Snj1ZhTGL3krFdM_O9Gg5cPQ_YamDB8"
+#define DATABASE_URL "https://waterlevel-34678-default-rtdb.asia-southeast1.firebasedatabase.app/"
+
+// Ultrasonic Sensor Pins
+#define TRIG_PIN 4
+#define ECHO_PIN 18
+#define TANK_HEIGHT_CM 100  // Set your tank height here
+
+// Firebase Objects
+FirebaseData fbdo;
+FirebaseAuth auth;
+FirebaseConfig config;
+
+void setup() {
+  Serial.begin(115200);
+
+  pinMode(TRIG_PIN, OUTPUT);
+  pinMode(ECHO_PIN, INPUT);
+
+  // Connect to WiFi
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  Serial.print("Connecting to Wi-Fi");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nConnected to WiFi!");
+
+  // Firebase Config
+  config.api_key = API_KEY;
+  config.database_url = DATABASE_URL;
+
+  // Anonymous sign-in
+  auth.user.email = "229x1a0451@gprec.ac.in";
+  auth.user.password = "Divakar@9154";
+
+  Firebase.begin(&config, &auth);
+  Firebase.reconnectWiFi(true);
+}
+
+float measureDistance() {
+  digitalWrite(TRIG_PIN, LOW);
+  delayMicroseconds(2);
+  digitalWrite(TRIG_PIN, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIG_PIN, LOW);
+
+  long duration = pulseIn(ECHO_PIN, HIGH);
+  float distance = duration * 0.034 / 2.0;  // in cm
+  return distance;
+}
+
+void loop() {
+  float distance = measureDistance();
+  float waterLevel = TANK_HEIGHT_CM - distance;
+
+  if (distance <= 0 || distance > TANK_HEIGHT_CM + 20) {
+    Serial.println("Invalid distance reading");
+    delay(2000);
+    return;
+  }
+
+  Serial.print("Measured Distance: ");
+  Serial.print(distance);
+  Serial.print(" cm | Water Level: ");
+  Serial.print(waterLevel);
+  Serial.println(" cm");
+
+  // Upload only water level as float
+  if (Firebase.ready()) {
+    if (Firebase.RTDB.setFloat(&fbdo, "/waterLevel", waterLevel)) {
+      Serial.println("Water level sent to Firebase");
+    } else {
+      Serial.print("Failed to send data: ");
+      Serial.println(fbdo.errorReason());
+    }
+  }
+
+  delay(5000);  // Wait 5 seconds before next measurement
+}
